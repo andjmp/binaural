@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f0f1a"/>
+      <stop offset="100%" style="stop-color:#1a1a2e"/>
+    </linearGradient>
+    <linearGradient id="wave1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#a78bfa"/>
+      <stop offset="100%" style="stop-color:#60a5fa"/>
+    </linearGradient>
+    <linearGradient id="wave2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#a78bfa;stop-opacity:0.5"/>
+      <stop offset="100%" style="stop-color:#60a5fa;stop-opacity:0.5"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="100" height="100" rx="22" fill="url(#bg)"/>
+
+  <!-- Left sine wave -->
+  <path d="M10,50 C16,30 24,30 30,50 C36,70 44,70 50,50 C56,30 64,30 70,50 C76,70 84,70 90,50"
+    fill="none" stroke="url(#wave2)" stroke-width="3.5" stroke-linecap="round"/>
+
+  <!-- Right sine wave (offset) -->
+  <path d="M10,50 C16,70 24,70 30,50 C36,30 44,30 50,50 C56,70 64,70 70,50 C76,30 84,30 90,50"
+    fill="none" stroke="url(#wave1)" stroke-width="3.5" stroke-linecap="round"/>
+
+  <!-- Center dot / beat indicator -->
+  <circle cx="50" cy="50" r="5" fill="url(#wave1)" opacity="0.9"/>
+</svg>
