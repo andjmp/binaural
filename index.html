@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Binaural Beats</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0f0f1a; font-family: 'Segoe UI', sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const PRESETS = [
+      { name: "Delta", symbol: "δ", desc: "Deep Sleep", beat: 2,  color: "#6c63ff" },
+      { name: "Theta", symbol: "θ", desc: "Meditation", beat: 6,  color: "#00c9a7" },
+      { name: "Alpha", symbol: "α", desc: "Relaxation", beat: 10, color: "#f7971e" },
+      { name: "Beta",  symbol: "β", desc: "Focus",      beat: 20, color: "#f64f59" },
+      { name: "Gamma", symbol: "γ", desc: "Peak Mode",  beat: 40, color: "#a78bfa" },
+    ];
+
+    function Fader({ label, hz, color, railRef, onPointerDown, onPointerMove }) {
+      const pct = ((hz - 20) / 180) * 100;
+      return (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, height: "100%", userSelect: "none" }}>
+          <div style={{ fontSize: 11, color: "#7070a0", letterSpacing: 1, fontWeight: 600 }}>{label}</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color, whiteSpace: "nowrap" }}>{hz}<span style={{ fontSize: 10, fontWeight: 400 }}> Hz</span></div>
+          <div style={{ fontSize: 10, color: "#505080" }}>200</div>
+          <div
+            ref={railRef}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            style={{ flex: 1, width: 48, borderRadius: 8, background: "#1a1a2e", border: "1px solid rgba(255,255,255,0.08)", position: "relative", cursor: "pointer", touchAction: "none", boxShadow: "inset 0 2px 8px rgba(0,0,0,0.5)" }}
+          >
+            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: pct + "%", background: "linear-gradient(to top, " + color + "99, " + color + "33)", borderRadius: 8 }} />
+            {[25, 50, 75].map(t => (
+              <div key={t} style={{ position: "absolute", bottom: t + "%", left: 6, right: 6, height: 1, background: "rgba(255,255,255,0.08)" }} />
+            ))}
+            <div style={{ position: "absolute", left: "50%", bottom: pct + "%", transform: "translate(-50%, 50%)", width: 56, height: 28, borderRadius: 6, background: "linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.04) 100%)", border: "2px solid " + color, boxShadow: "0 0 12px " + color + "88, 0 4px 12px rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", gap: 4, pointerEvents: "none" }}>
+              {[-4, 0, 4].map(o => <div key={o} style={{ width: 2, height: 14, borderRadius: 1, background: color + "cc" }} />)}
+            </div>
+          </div>
+          <div style={{ fontSize: 10, color: "#505080" }}>20</div>
+        </div>
+      );
+    }
+
+    function App() {
+      const [base, setBase]       = useState(100);
+      const [upper, setUpper]     = useState(110);
+      const [swapped, setSwapped] = useState(false);
+      const [preset, setPreset]   = useState(null);
+      const [playing, setPlaying] = useState(false);
+      const [volume, setVolume]   = useState(0.4);
+
+      const oscCtx  = useRef(null);
+      const oscL    = useRef(null);
+      const oscR    = useRef(null);
+      const gainRef = useRef(null);
+      const railL   = useRef(null);
+      const railR   = useRef(null);
+
+      const leftHz  = swapped ? upper : base;
+      const rightHz = swapped ? base  : upper;
+
+      const nudge = (l, r) => {
+        if (oscCtx.current && oscL.current) {
+          oscL.current.frequency.setTargetAtTime(l, oscCtx.current.currentTime, 0.02);
+          oscR.current.frequency.setTargetAtTime(r, oscCtx.current.currentTime, 0.02);
+        }
+      };
+
+      const getVal = (rail, clientY) => {
+        const { top, height } = rail.current.getBoundingClientRect();
+        return Math.round(20 + (1 - Math.min(1, Math.max(0, (clientY - top) / height))) * 180);
+      };
+
+      const onLeftDown = (e) => { e.preventDefault(); railL.current.setPointerCapture(e.pointerId); handleLeft(e.clientY); };
+      const onLeftMove = (e) => { if (e.buttons === 0) return; handleLeft(e.clientY); };
+      const handleLeft = (clientY) => {
+        const val = getVal(railL, clientY);
+        if (swapped) {
+          const newUpper = val;
+          const newBase = preset ? Math.min(200, Math.max(20, val - preset.beat)) : base;
+          setUpper(newUpper);
+          if (preset) setBase(newBase);
+          nudge(newUpper, preset ? newBase : base);
+        } else {
+          const newBase = val;
+          const newUpper = preset ? Math.min(200, Math.max(20, val + preset.beat)) : upper;
+          setBase(newBase);
+          if (preset) setUpper(newUpper);
+          nudge(newBase, preset ? newUpper : upper);
+        }
+      };
+
+      const onRightDown = (e) => { e.preventDefault(); railR.current.setPointerCapture(e.pointerId); handleRight(e.clientY); };
+      const onRightMove = (e) => { if (e.buttons === 0) return; handleRight(e.clientY); };
+      const handleRight = (clientY) => {
+        const val = getVal(railR, clientY);
+        if (swapped) {
+          const newBase = val;
+          const newUpper = preset ? Math.min(200, Math.max(20, val + preset.beat)) : upper;
+          setBase(newBase);
+          if (preset) setUpper(newUpper);
+          nudge(preset ? newUpper : upper, newBase);
+        } else {
+          const newUpper = val;
+          const newBase = preset ? Math.min(200, Math.max(20, val - preset.beat)) : base;
+          setUpper(newUpper);
+          if (preset) setBase(newBase);
+          nudge(preset ? newBase : base, newUpper);
+        }
+      };
+
+      const applyPreset = (p) => {
+        if (preset && preset.name === p.name) {
+          setPreset(null);
+        } else {
+          setPreset(p);
+          const newUpper = Math.min(200, base + p.beat);
+          setUpper(newUpper);
+          nudge(leftHz, newUpper);
+        }
+      };
+
+      const swap = () => setSwapped(s => !s);
+
+      useEffect(() => {
+        if (gainRef.current) gainRef.current.gain.value = volume;
+      }, [volume]);
+
+      useEffect(() => {
+        nudge(leftHz, rightHz);
+      }, [leftHz, rightHz]);
+
+      useEffect(() => () => {
+        oscL.current && oscL.current.stop();
+        oscR.current && oscR.current.stop();
+        oscCtx.current && oscCtx.current.close();
+      }, []);
+
+      const togglePlay = async () => {
+        if (playing) {
+          oscL.current && oscL.current.stop();
+          oscR.current && oscR.current.stop();
+          oscCtx.current && oscCtx.current.close();
+          oscCtx.current = oscL.current = oscR.current = gainRef.current = null;
+          setPlaying(false);
+        } else {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          await ctx.resume();
+          const merger = ctx.createChannelMerger(2);
+          const gain = ctx.createGain();
+          gain.gain.value = volume;
+          merger.connect(gain); gain.connect(ctx.destination);
+          const lo = ctx.createOscillator(), ro = ctx.createOscillator();
+          const lg = ctx.createGain(), rg = ctx.createGain();
+          lo.frequency.value = leftHz; ro.frequency.value = rightHz;
+          lo.type = ro.type = "sine";
+          lo.connect(lg); ro.connect(rg);
+          lg.connect(merger, 0, 0); rg.connect(merger, 0, 1);
+          lo.start(); ro.start();
+          oscCtx.current = ctx; oscL.current = lo; oscR.current = ro; gainRef.current = gain;
+          setPlaying(true);
+        }
+      };
+
+      const beat = Math.abs(rightHz - leftHz);
+      const activeColor = preset ? preset.color : "#60a5fa";
+      const beatLabel = beat <= 4 ? "Delta" : beat <= 8 ? "Theta" : beat <= 13 ? "Alpha" : beat <= 30 ? "Beta" : "Gamma";
+
+      const btnStyle = (active, color) => ({
+        flex: 1, borderRadius: 11,
+        border: "2px solid " + (active ? color : "rgba(255,255,255,0.1)"),
+        background: active ? color + "22" : "rgba(255,255,255,0.03)",
+        color: active ? color : "#8080b0",
+        cursor: "pointer", fontWeight: 600, transition: "all 0.2s",
+        display: "flex", alignItems: "center", padding: "4px 10px", gap: 6,
+      });
+
+      return (
+        <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #0f0f1a 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div style={{ width: "100%", maxWidth: 460, color: "#e0e0ff" }}>
+            <h1 style={{ textAlign: "center", fontSize: 20, fontWeight: 700, letterSpacing: 2, marginBottom: 12, background: "linear-gradient(90deg, #a78bfa, #60a5fa)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+              BINAURAL BEATS
+            </h1>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, background: "rgba(255,255,255,0.04)", borderRadius: 14, padding: "10px 16px", border: "1px solid rgba(255,255,255,0.07)" }}>
+              <span>🔊</span>
+              <input type="range" min={0} max={1} step={0.01} value={volume}
+                onInput={e => setVolume(+e.target.value)} onChange={e => setVolume(+e.target.value)}
+                style={{ flex: 1, accentColor: "#a78bfa", cursor: "pointer" }} />
+              <span style={{ fontSize: 13, color: "#7070a0", minWidth: 34, textAlign: "right" }}>{Math.round(volume * 100)}%</span>
+            </div>
+
+            <div style={{ display: "flex", gap: 12, alignItems: "stretch", height: 460 }}>
+              <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 16, padding: "14px 10px", border: "1px solid rgba(255,255,255,0.07)", display: "flex" }}>
+                <Fader label="LEFT" hz={leftHz} color="#a78bfa" railRef={railL} onPointerDown={onLeftDown} onPointerMove={onLeftMove} />
+              </div>
+
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10 }}>
+                <button onClick={togglePlay} style={{ background: playing ? "radial-gradient(circle, " + activeColor + "44, #0f0f1a)" : "radial-gradient(circle, " + activeColor + "22, #0f0f1a)", border: "2px solid " + (playing ? activeColor : activeColor + "66"), borderRadius: 16, padding: "12px 8px", cursor: "pointer", color: "#e0e0ff", boxShadow: playing ? "0 0 24px " + activeColor + "66" : "none", transition: "all 0.3s", textAlign: "center" }}>
+                  <div style={{ fontSize: 42, fontWeight: 800, color: activeColor, lineHeight: 1 }}>{beat.toFixed(1)}</div>
+                  <div style={{ fontSize: 12, color: "#9090c0", marginTop: 2 }}>Hz · {beatLabel}</div>
+                  <div style={{ fontSize: 11, color: "#606080", marginTop: 1 }}>{playing ? "⏹ tap to stop" : "▶ tap to play"}</div>
+                </button>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1 }}>
+                  <button onClick={swap} style={btnStyle(swapped, "#60a5fa")}>
+                    <span style={{ fontSize: 18, flex: 1, textAlign: "center" }}>⇄</span>
+                  </button>
+                  {[...PRESETS].reverse().map(p => (
+                    <button key={p.name} onClick={() => applyPreset(p)} style={btnStyle(preset && preset.name === p.name, p.color)}>
+                      <span style={{ fontSize: 18, opacity: 0.9, minWidth: 18 }}>{p.symbol}</span>
+                      <span style={{ fontSize: 13, flex: 1, textAlign: "left" }}>{p.name}</span>
+                      <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.7, whiteSpace: "nowrap" }}>{p.desc} · {p.beat}Hz</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 16, padding: "14px 10px", border: "1px solid rgba(255,255,255,0.07)", display: "flex" }}>
+                <Fader label="RIGHT" hz={rightHz} color="#60a5fa" railRef={railR} onPointerDown={onRightDown} onPointerMove={onRightMove} />
+              </div>
+            </div>
+
+            <p style={{ textAlign: "center", fontSize: 11, color: "#404060", marginTop: 16 }}>
+              ⚠️ Stereo headphones required for binaural effect
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
