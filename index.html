@@ -5,11 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Binaural Beats</title>
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Binaural">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
   <style>
@@ -151,11 +149,17 @@
         oscCtx.current && oscCtx.current.close();
       }, []);
 
+      const audioElRef = useRef(null);
+
       const togglePlay = async () => {
         if (playing) {
           oscL.current && oscL.current.stop();
           oscR.current && oscR.current.stop();
           oscCtx.current && oscCtx.current.close();
+          if (audioElRef.current) {
+            audioElRef.current.pause();
+            audioElRef.current.srcObject = null;
+          }
           oscCtx.current = oscL.current = oscR.current = gainRef.current = null;
           setPlaying(false);
         } else {
@@ -164,7 +168,15 @@
           const merger = ctx.createChannelMerger(2);
           const gain = ctx.createGain();
           gain.gain.value = volume;
-          merger.connect(gain); gain.connect(ctx.destination);
+          merger.connect(gain);
+
+          // Route through MediaStreamDestination so iOS treats it as media
+          const streamDest = ctx.createMediaStreamDestination();
+          gain.connect(streamDest);
+
+          // Also connect to normal output so it plays through speakers
+          gain.connect(ctx.destination);
+
           const lo = ctx.createOscillator(), ro = ctx.createOscillator();
           const lg = ctx.createGain(), rg = ctx.createGain();
           lo.frequency.value = leftHz; ro.frequency.value = rightHz;
@@ -172,6 +184,31 @@
           lo.connect(lg); ro.connect(rg);
           lg.connect(merger, 0, 0); rg.connect(merger, 0, 1);
           lo.start(); ro.start();
+
+          // Attach stream to hidden audio element to qualify for background playback
+          if (!audioElRef.current) {
+            audioElRef.current = document.createElement("audio");
+            audioElRef.current.autoplay = true;
+          }
+          audioElRef.current.srcObject = streamDest.stream;
+          await audioElRef.current.play();
+
+          // Register with Media Session API for lock screen
+          if ("mediaSession" in navigator) {
+            navigator.mediaSession.metadata = new MediaMetadata({
+              title: "Binaural Beats",
+              artist: beat.toFixed(1) + " Hz · " + beatLabel,
+            });
+            navigator.mediaSession.setActionHandler("play", () => {
+              ctx.resume();
+              audioElRef.current && audioElRef.current.play();
+            });
+            navigator.mediaSession.setActionHandler("pause", () => {
+              ctx.suspend();
+              audioElRef.current && audioElRef.current.pause();
+            });
+          }
+
           oscCtx.current = ctx; oscL.current = lo; oscR.current = ro; gainRef.current = gain;
           setPlaying(true);
         }
